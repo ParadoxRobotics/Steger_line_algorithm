@@ -7,7 +7,9 @@ import cv2
 from matplotlib import pyplot as plt
 from matplotlib import pyplot
 
-def computeDerivative(img):
+def computeDerivative(img, sigmaX, sigmaY):
+    # blurr the image
+    img = cv2.GaussianBlur(img, ksize=(0,0), sigmaX=sigmaX, sigmaY=sigmaY)
     # create filter for derivative calulation
     dxFilter = np.array([[1],[0],[-1]])
     dyFilter = np.array([[1,0,-1]])
@@ -22,153 +24,25 @@ def computeDerivative(img):
     dxy = cv2.filter2D(img,-1, dxyFilter)
     return dx, dy, dxx, dyy, dxy
 
-
-def nonMaxSuppression(dxx, dyy, dxy):
-    # compute magnitude of each derivative
+def computeMagnitude(dxx, dyy):
+    # convert to float
     dxx = dxx.astype(float)
     dyy = dyy.astype(float)
-    magnitude = cv2.magnitude(dxx, dyy)
-    plt.imshow(magnitude)
-    plt.show()
-    angle = magnitude*180./np.pi
-    angle[angle < 0] += 180
-    # get derivative shape
-    W, H = dxy.shape
-    # create an empty gradient map
-    mapGrad = np.zeros((H,W), dtype=np.int32)
+    # calculate magnitude and angle
+    mag = cv2.magnitude(dxx, dyy)
+    phase = mag*180./np.pi
+    return mag, phase
 
-    for i in range(0,H):
-        for j in range(0,W):
-            q = 255
-            r = 255
-           #angle 0
-            if (0 <= angle[i,j] < 22.5) or (157.5 <= angle[i,j] <= 180):
-                # position
-                qi = i
-                ri = i
-                qj = i+1
-                rj = j-1
-                # verify border in i
-                if qi < 0:
-                    qi = 0
-                if qi > H-1:
-                    qi = H-1
-                if ri < 0:
-                    ri = 0
-                if ri > H-1:
-                    ri = H-1
-                # verify border in j
-                if qj < 0:
-                    qj = 0
-                if qj > W-1:
-                    qj = W-1
-                if rj < 0:
-                    rj = 0
-                if rj > W-1:
-                    rj = W-1
-                # apply
-                q = dxy[qi, qj]
-                r = dxy[ri, rj]
-            #angle 45
-            elif (22.5 <= angle[i,j] < 67.5):
-                # position
-                qi = i+1
-                ri = i-1
-                qj = j-1
-                rj = j+1
-                # verify border in i
-                if qi < 0:
-                    qi = 0
-                if qi > H-1:
-                    qi = H-1
-                if ri < 0:
-                    ri = 0
-                if ri > H-1:
-                    ri = H-1
-                # verify border in j
-                if qj < 0:
-                    qj = 0
-                if qj > W-1:
-                    qj = W-1
-                if rj < 0:
-                    rj = 0
-                if rj > W-1:
-                    rj = W-1
-                print(qi, qj, H-1)
-                print(ri, rj, W-1)
-                # apply
-                q = dxy[qi, qj]
-                r = dxy[ri, rj]
-            #angle 90
-            elif (67.5 <= angle[i,j] < 112.5):
-                qi = i+1
-                qj = j
-                ri = i-1
-                rj = j
-                # verify border in i
-                if qi < 0:
-                    qi = 0
-                if qi > H-1:
-                    qi = H-1
-                if ri < 0:
-                    ri = 0
-                if ri > H-1:
-                    ri = H-1
-                # verify border in j
-                if qj < 0:
-                    qj = 0
-                if qj > W-1:
-                    qj = W-1
-                if rj < 0:
-                    rj = 0
-                if rj > W-1:
-                    rj = W-1
-                # apply
-                q = dxy[qi, qj]
-                r = dxy[ri, rj]
-            #angle 135
-            elif (112.5 <= angle[i,j] < 157.5):
-                qi = i-1
-                qj = j-1
-                ri = i+1
-                rj = j+1
-                # verify border in i
-                if qi <= 0:
-                    qi = 0
-                if qi > H-1:
-                    qi = H-1
-                if ri < 0:
-                    ri = 0
-                if ri > H-1:
-                    ri = H-1
-                # verify border in j
-                if qj < 0:
-                    qj = 0
-                if qj > W-1:
-                    qj = W-1
-                if rj < 0:
-                    rj = 0
-                if rj > W-1:
-                    rj = W-1
-                # apply
-                q = dxy[qi, qj]
-                r = dxy[ri, rj]
-
-            if (dxy[i,j] >= q) and (dxy[i,j] >= r):
-                mapGrad[i,j] = dxy[j,i]
-            else:
-                mapGrad[i,j] = 0
-
-    return mapGrad
-
-
-def computeHessian(img, dx, dy, dxx, dyy, dxy):
+def computeHessian(dx, dy, dxx, dyy, dxy):
+    # create empty list
     point=[]
+    direction=[]
+    value=[]
     # for the all image
     for x in range(0, img.shape[1]): # column
         for y in range(0, img.shape[0]): # line
             # if superior to certain threshold
-            if img[y,x] > 10:
+            if dxy[y,x] > 0:
                 # compute local hessian
                 hessian = np.zeros((2,2))
                 hessian[0,0] = dxx[y,x]
@@ -177,7 +51,7 @@ def computeHessian(img, dx, dy, dxx, dyy, dxy):
                 hessian[1,1] = dyy[y,x]
                 # compute eigen vector and eigne value
                 ret, eigenVal, eigenVect = cv2.eigen(hessian)
-                if np.abs(eigenVal[0,0]) <= np.abs(eigenVal[1,0]):
+                if np.abs(eigenVal[0,0]) >= np.abs(eigenVal[1,0]):
                     nx = eigenVect[0,0]
                     ny = eigenVect[0,1]
                 else:
@@ -191,24 +65,41 @@ def computeHessian(img, dx, dy, dxx, dyy, dxy):
                     # update point
                     if np.abs(T*nx) <= 0.5 and np.abs(T*ny) <= 0.5:
                         point.append((x,y))
-    return point
+                        direction.append((nx,ny))
+                        value.append(np.abs(dxy[y,x]+dxy[y,x]))
+    return point, direction, value
 
 # resize, grayscale and blurr
 img = cv2.imread("im0.png")
-img = cv2.resize(img, (320,240))
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+img = cv2.resize(img, (640,480))
 gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-gray_gauss_img = cv2.GaussianBlur(gray_img, ksize=(0,0), sigmaX=1, sigmaY=1)
 # compute derivative
-dx, dy, dxx, dyy, dxy = computeDerivative(gray_gauss_img)
-# non-max suppresion
-dxy = nonMaxSuppression(dxx, dyy, dxy)
-# compute relevant point
-pt = computeHessian(gray_gauss_img, dx, dy, dxx, dyy, dxy)
-# plot points
-for i in range(0, len(pt)):
-    img = cv2.circle(img, (pt[i][0], pt[i][1]), 1, (255, 0, 0), 1)
+dx, dy, dxx, dyy, dxy = computeDerivative(gray_img, 1.1, 1.1)
+normal, phase = computeMagnitude(dxx, dyy)
+pt, dir, val = computeHessian(dx, dy, dxx, dyy, dxy)
 
+# take the first n max value
+nMax = 10000
+idx = np.argsort(val)
+idx = idx[::-1][:nMax]
+# plot resulting point
+for i in range(0, len(idx)):
+    img = cv2.circle(img, (pt[idx[i]][0], pt[idx[i]][1]), 1, (255, 0, 0), 1)
+# plot the result
+plt.imshow(dx)
+plt.show()
+plt.imshow(dy)
+plt.show()
+plt.imshow(dxx)
+plt.show()
+plt.imshow(dyy)
+plt.show()
 plt.imshow(dxy)
+plt.show()
+plt.imshow(normal)
+plt.show()
+plt.imshow(phase)
 plt.show()
 plt.imshow(img)
 plt.show()
