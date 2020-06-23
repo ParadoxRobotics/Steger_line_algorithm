@@ -4,6 +4,7 @@ Simple implementation in python of Steger algorithm to find curvilinear structur
 this code use OpenCV 4.2.0 and Python 3.6.
 
 Steger line : basic implementation of the stegger algorithm
+
 Steger Line with Non-Max Supression : same implementation but with a non-max supression phase performed on the magnitude (gradient normal)
 
 Based on : Carsten Steger, "An Unbiased Detector of Curvilinear Structures",  IEEE Transactions on Pattern Analysis and Machine Intelligence (Volume: 20 , Issue: 2 , Feb 1998) 
